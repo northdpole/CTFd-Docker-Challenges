@@ -1,3 +1,4 @@
+import os
 import traceback
 
 from CTFd.plugins.challenges import BaseChallenge, CHALLENGE_CLASSES, get_chal_class
@@ -48,6 +49,21 @@ from CTFd.forms.fields import SubmitField
 from CTFd.utils.config import get_themes
 
 from pathlib import Path
+
+
+def participant_visible_host(docker):
+    """
+    Hostname shown to players for spawned containers (browser address bar).
+
+    Admin → Docker Config ``hostname`` is the Docker API endpoint (e.g. ``docker-socket-proxy:2375``)
+    and is not a name participants can open. Set ``DOCKER_CHALLENGES_PUBLIC_HOST`` or
+    ``PWNZZAI_PUBLIC_HOST`` to this machine's public DNS name or IP (no ``http://``).
+    """
+    for key in ("DOCKER_CHALLENGES_PUBLIC_HOST", "PWNZZAI_PUBLIC_HOST"):
+        v = os.environ.get(key, "").strip()
+        if v:
+            return v
+    return str(docker.hostname).split(":")[0]
 
 
 class DockerConfig(db.Model):
@@ -284,7 +300,10 @@ def get_unavailable_ports(docker):
     for i in r.json():
         if not i['Ports'] == []:
             for p in i['Ports']:
-                result.append(p['PublicPort'])
+                # Newer Docker API: entries may omit PublicPort (e.g. private-only bindings).
+                pub = p.get("PublicPort")
+                if pub is not None:
+                    result.append(pub)
     return result
 
 
@@ -318,7 +337,7 @@ def create_container(docker, image, team, portbl):
     tmp_ports = list(assigned_ports.keys())
     for i in needed_ports:
         ports[i] = {}
-        bindings[i] = [{"HostPort": tmp_ports.pop()}]
+        bindings[i] = [{"HostPort": tmp_ports.pop().split("/")[0]}]
     headers = {'Content-Type': "application/json"}
     data = json.dumps({"Image": image, "ExposedPorts": ports, "HostConfig": {"PortBindings": bindings}})
     if tls:
@@ -611,7 +630,7 @@ class ContainerAPI(Resource):
             revert_time=unix_time(datetime.utcnow()) + 300,
             instance_id=create[0]['Id'],
             ports=','.join([p[0]['HostPort'] for p in ports]),
-            host=str(docker.hostname).split(':')[0],
+            host=participant_visible_host(docker),
             challenge=challenge
         )
         db.session.add(entry)
@@ -650,7 +669,7 @@ class DockerStatus(Resource):
                 'revert_time': i.revert_time,
                 'instance_id': i.instance_id,
                 'ports': i.ports.split(','),
-                'host': str(docker.hostname).split(':')[0]
+                'host': participant_visible_host(docker),
             })
         return {
             'success': True,
