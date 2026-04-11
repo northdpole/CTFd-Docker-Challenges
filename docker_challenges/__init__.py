@@ -56,14 +56,20 @@ def participant_visible_host(docker):
     Hostname shown to players for spawned containers (browser address bar).
 
     Admin → Docker Config ``hostname`` is the Docker API endpoint (e.g. ``docker-socket-proxy:2375``)
-    and is not a name participants can open. Set ``DOCKER_CHALLENGES_PUBLIC_HOST`` or
-    ``PWNZZAI_PUBLIC_HOST`` to this machine's public DNS name or IP (no ``http://``).
+    and is not a name participants can open. ``DOCKER_CHALLENGES_PUBLIC_HOST`` must be set in the
+    CTFd container environment (repo-root ``.env`` + compose).
     """
     for key in ("DOCKER_CHALLENGES_PUBLIC_HOST", "PWNZZAI_PUBLIC_HOST"):
         v = os.environ.get(key, "").strip()
         if v:
             return v
-    return str(docker.hostname).split(":")[0]
+    abort(
+        503,
+        description=(
+            "DOCKER_CHALLENGES_PUBLIC_HOST is not set. Add it to repo-root .env and redeploy CTFd "
+            "(see .env.example and scripts/ctfd_setup/README.md)."
+        ),
+    )
 
 
 class DockerConfig(db.Model):
