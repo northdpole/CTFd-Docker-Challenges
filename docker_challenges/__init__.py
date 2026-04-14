@@ -286,19 +286,46 @@ def get_client_cert(docker):
 
 # For the Docker Config Page. Gets the Current Repositories available on the Docker Server.
 def get_repositories(docker, tags=False, repos=False):
+    """
+    Return available docker repositories/tags.
+
+    `repos` may be:
+    - False/None (no filter)
+    - comma separated string (stored in DockerConfig.repositories)
+    - list/tuple/set
+    """
     r = do_request(docker, '/images/json?all=1')
-    result = list()
-    for i in r.json():
-        if not i['RepoTags'] == []:
-            if not i['RepoTags'][0].split(':')[0] == '<none>':
-                if repos:
-                    if not i['RepoTags'][0].split(':')[0] in repos:
-                        continue
-                if not tags:
-                    result.append(i['RepoTags'][0].split(':')[0])
-                else:
-                    result.append(i['RepoTags'][0])
-    return list(set(result))
+    if not r or not getattr(r, "ok", False):
+        return []
+
+    repo_filter = set()
+    if repos:
+        if isinstance(repos, str):
+            repo_filter = {entry.strip() for entry in repos.split(",") if entry.strip()}
+        elif isinstance(repos, (list, tuple, set)):
+            repo_filter = {str(entry).strip() for entry in repos if str(entry).strip()}
+
+    result = set()
+    for image in r.json():
+        for repo_tag in image.get("RepoTags", []) or []:
+            repository = repo_tag.split(":")[0]
+            if repository == "<none>":
+                continue
+            if repo_filter and repository not in repo_filter:
+                continue
+            result.add(repo_tag if tags else repository)
+
+    # If a repository filter is configured but returns nothing, fall back to all
+    # tagged images so challenge edit/create remains functional.
+    if not result and repo_filter:
+        for image in r.json():
+            for repo_tag in image.get("RepoTags", []) or []:
+                repository = repo_tag.split(":")[0]
+                if repository == "<none>":
+                    continue
+                result.add(repo_tag if tags else repository)
+
+    return list(result)
 
 
 def get_unavailable_ports(docker):
@@ -591,8 +618,6 @@ class ContainerAPI(Resource):
         
         docker = DockerConfig.query.filter_by(id=1).first()
         containers = DockerChallengeTracker.query.all()
-        if container not in get_repositories(docker, tags=True):
-            return abort(403,f"Container {container} not present in the repository.")
         if is_teams_mode():
             session = get_current_team()
             # First we'll delete all old docker containers (+2 hours)
@@ -611,6 +636,11 @@ class ContainerAPI(Resource):
                     db.session.commit()
             check = DockerChallengeTracker.query.filter_by(user_id=session.id).filter_by(docker_image=container).first()
         
+        # For stop/revert flows, allow operating on the tracked running instance
+        # even if the image is no longer listed by Docker image APIs.
+        if check is None and container not in get_repositories(docker, tags=True):
+            return abort(403,f"Container {container} not present in the repository.")
+
         # If this container is already created, we don't need another one.
         if check != None and not (unix_time(datetime.utcnow()) - int(check.timestamp)) >= 300:
             return abort(403,"To prevent abuse, dockers can be reverted and stopped after 5 minutes of creation.")
@@ -709,6 +739,13 @@ class DockerAPI(Resource):
     @admins_only
     def get(self):
         docker = DockerConfig.query.filter_by(id=1).first()
+        if not docker:
+            return {
+                'success': False,
+                'data': [
+                    {'name': 'Error in Docker Config!'}
+                ]
+            }, 400
         images = get_repositories(docker, tags=True, repos=docker.repositories)
         if images:
             data = list()

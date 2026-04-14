@@ -31,7 +31,7 @@ This plugin for CTFd will allow your competing teams/users to start dockerized i
 * Restart CTFd.
 * Navigate to `/admin/docker_config`. Add your configuration information. Click Submit.
 * Add your required repositories for this CTF. You can select multiple by holding CTRL when clicking. Click Submit.
-* Click Challenges, Select `docker` for challenge type. Create a challenge as normal, but select the correct docker tag for this challenge.
+* Click Challenges, Select `docker` for challenge type. Create a challenge as normal, select the correct docker tag for this challenge, and optionally toggle **Show flag submission input** (enabled by default).
 * Double check the front end shows "Start Docker Instance" on the challenge.
 * Confirm users are able to start/revert and access docker challenges.
 * For web challenges, configure http://host:port in the connection field, this is changed automagically when the docker is started
