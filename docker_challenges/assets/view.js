@@ -15,6 +15,37 @@ CTFd._internal.challenge.postRender = function() {
     const containername = CTFd._internal.challenge.data.docker_image;
     get_docker_status(containername);
     createWarningModalBody();
+    toggleSolvesTab();
+}
+
+function toggleSolvesTab() {
+    // If submission is disabled for this challenge, hide Solves UI in the launch modal.
+    if (CTFd._internal.challenge.data.show_flag_input) {
+        return;
+    }
+
+    const navTabSelectors = [
+        'a[href="#solves"]',
+        'a[href="#challenge-solves"]',
+        'a[data-target="#solves"]',
+        'a[data-target="#challenge-solves"]',
+        'button[data-bs-target="#solves"]',
+        'button[data-bs-target="#challenge-solves"]'
+    ];
+
+    navTabSelectors.forEach(selector => {
+        CTFd.lib.$(selector).closest("li").hide();
+        CTFd.lib.$(selector).hide();
+    });
+
+    const paneSelectors = [
+        '#solves',
+        '#challenge-solves',
+        '[id*="solves"][class*="tab-pane"]'
+    ];
+    paneSelectors.forEach(selector => {
+        CTFd.lib.$(selector).hide();
+    });
 }
 
 function createWarningModalBody(){
