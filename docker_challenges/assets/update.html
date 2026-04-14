@@ -13,6 +13,15 @@
     </label>
     <select id="dockerimage_select" name="docker_image" class="form-control" required></select>
 </div>
+<div class="form-group form-check">
+    <input type="checkbox" class="form-check-input" id="show-flag-input" name="show_flag_input" {% if challenge.show_flag_input %}checked{% endif %}>
+    <label class="form-check-label" for="show-flag-input">
+        Show flag submission input
+    </label>
+    <small class="form-text text-muted">
+        Disable this to hide the flag input for this specific docker challenge.
+    </small>
+</div>
 {% endblock %}
 {% block footer %}
 <script>

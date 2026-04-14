@@ -1,5 +1,6 @@
 import os
 import traceback
+from sqlalchemy import inspect, text
 
 from CTFd.plugins.challenges import BaseChallenge, CHALLENGE_CLASSES, get_chal_class
 from CTFd.plugins.flags import get_flag_class
@@ -402,6 +403,10 @@ class DockerChallengeType(BaseChallenge):
 		:return:
 		"""
         data = request.form or request.get_json()
+        if request.form is not None and len(request.form) > 0:
+            data = data.copy()
+            # Checkbox semantics: checked => present, unchecked => absent.
+            data["show_flag_input"] = "show_flag_input" in request.form
         for attr, value in data.items():
             setattr(challenge, attr, value)
 
@@ -444,6 +449,7 @@ class DockerChallengeType(BaseChallenge):
             'name': challenge.name,
             'value': challenge.value,
             'docker_image': challenge.docker_image,
+            'show_flag_input': challenge.show_flag_input,
             'description': challenge.description,
             'category': challenge.category,
             'state': challenge.state,
@@ -467,6 +473,12 @@ class DockerChallengeType(BaseChallenge):
 		:return:
 		"""
         data = request.form or request.get_json()
+        if request.form is not None and len(request.form) > 0:
+            data = data.copy()
+            data["show_flag_input"] = "show_flag_input" in request.form
+        if "show_flag_input" not in data:
+            # Default behavior: keep submission input visible.
+            data["show_flag_input"] = True
         challenge = DockerChallenge(**data)
         db.session.add(challenge)
         db.session.commit()
@@ -558,6 +570,7 @@ class DockerChallenge(Challenges):
     __mapper_args__ = {'polymorphic_identity': 'docker'}
     id = db.Column(None, db.ForeignKey('challenges.id'), primary_key=True)
     docker_image = db.Column(db.String(128), index=True)
+    show_flag_input = db.Column(db.Boolean, default=True, nullable=False, index=True)
 
 
 # API
@@ -719,6 +732,13 @@ class DockerAPI(Resource):
 
 def load(app):
     app.db.create_all()
+    inspector = inspect(db.engine)
+    columns = {column["name"] for column in inspector.get_columns("docker_challenge")}
+    if "show_flag_input" not in columns:
+        db.session.execute(
+            text("ALTER TABLE docker_challenge ADD COLUMN show_flag_input BOOLEAN NOT NULL DEFAULT 1")
+        )
+        db.session.commit()
     CHALLENGE_CLASSES['docker'] = DockerChallengeType
     @app.template_filter('datetimeformat')
     def datetimeformat(value, format='%Y-%m-%d %H:%M:%S'):
